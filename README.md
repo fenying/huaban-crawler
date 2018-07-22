@@ -27,11 +27,11 @@ Now you can run it from command line:
 
 ```sh
 node dist/index.js \
-    --board-id 1234
-    --output ./pictures
-    --gap 300
-    --accuracy 0.4
-    --ignore-saved
+    --board-id 1234 \
+    --output ./pictures \
+    --gap 300 \
+    --accuracy 0.4 \
+    --ignore-saved \
     --save-meta
 ```
 
