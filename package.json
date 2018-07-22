@@ -1,0 +1,29 @@
+{
+  "name": "huaban-crawler",
+  "version": "0.1.0",
+  "description": "This is a huaban-crawler base on Node.js.",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc -p .",
+    "rebuild": "npm run clean && npm run lint && npm run build",
+    "test": "echo No test yet",
+    "clean": "rm -rf dist",
+    "lint": "tslint -p . -c tslint.json"
+  },
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git@github.com:fenying/huaban-crawler.git"
+  },
+  "author": "Angus Fenying <fenying@litert.org>",
+  "devDependencies": {
+    "@types/node": "^9.6.22",
+    "typescript": "^2.7.1"
+  },
+  "engines": {
+    "node": ">=8.6.0"
+  },
+  "dependencies": {
+    "@litert/clap": "^0.2.2"
+  }
+}
