@@ -1,0 +1,38 @@
+{
+  "name": "huaban-crawler",
+  "version": "0.1.0",
+  "lockfileVersion": 1,
+  "requires": true,
+  "dependencies": {
+    "@litert/clap": {
+      "version": "0.2.2",
+      "resolved": "https://registry.npmjs.org/@litert/clap/-/clap-0.2.2.tgz",
+      "integrity": "sha512-d8UTqEghBf9tyNxAShTOk5aaFO8/pC4LgK8JPMSsZ4/l6/ZdqA7Fj+jvXxwHPTFpDlvK3O+WTuJuR6TNFgWrYA==",
+      "requires": {
+        "@litert/core": "^0.6.0"
+      }
+    },
+    "@litert/core": {
+      "version": "0.6.0",
+      "resolved": "https://registry.npmjs.org/@litert/core/-/core-0.6.0.tgz",
+      "integrity": "sha512-cbbfhCYzpCxOpl8JjoJ3pVJOi2pOYbUFPLzz0Fwkd1zlzwh9rUSpcZ3EY7Hsa/fweKkVx2VgxSplzM/kRKyNDQ=="
+    },
+    "@types/node": {
+      "version": "9.6.23",
+      "resolved": "https://registry.npmjs.org/@types/node/-/node-9.6.23.tgz",
+      "integrity": "sha512-d2SJJpwkiPudEQ3+9ysANN2Nvz4QJKUPoe/WL5zyQzI0RaEeZWH5K5xjvUIGszTItHQpFPdH+u51f6G/LkS8Cg==",
+      "dev": true
+    },
+    "reflect-metadata": {
+      "version": "0.1.12",
+      "resolved": "https://registry.npmjs.org/reflect-metadata/-/reflect-metadata-0.1.12.tgz",
+      "integrity": "sha512-n+IyV+nGz3+0q3/Yf1ra12KpCyi001bi4XFxSjbiWWjfqb52iTTtpGXmCCAOWWIAn9KEuFZKGqBERHmrtScZ3A=="
+    },
+    "typescript": {
+      "version": "2.9.2",
+      "resolved": "https://registry.npmjs.org/typescript/-/typescript-2.9.2.tgz",
+      "integrity": "sha512-Gr4p6nFNaoufRIY4NMdpQRNmgxVIGMs4Fcu/ujdYk3nAZqk7supzBE9idmvfZIlH/Cuj//dvi+019qEue9lV0w==",
+      "dev": true
+    }
+  }
+}
