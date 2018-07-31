@@ -50,11 +50,11 @@ node dist/index.js \
     -im
 ```
 
-### Example-2: Dump all baords belong to a user
+### Example-2: Dump all boards belong to a user
 
 Run it from command line:
 
-> **For example, to download all pins in boards of user whose ID is 1234.**
+> **For example, to download all pins in boards belong to the user of ID 1234.**
 > **And the pins in every boards will be save into folder like**
 > **path `./dump/<username>-<board-id>`.**
 
@@ -72,12 +72,12 @@ node dist/index.js \
 > And also you can use `--user-name` instead of `--user-id`.
 > For more details, see the parameters descriptions below.
 
-### Example-3: Dump all baords belong to users followed by a user
+### Example-3: Dump all boards belong to users followed by a user
 
 Run it from command line:
 
-> **For example, to download all pins in boards of users followed by the user**
-> **whose ID is 1234.**
+> **For example, to download all pins in boards belong to users followed by**
+> **the user of ID 1234.**
 > **And the pins in every boards will be save into folder like**
 > **path `./dump/<username>-<board-id>`.**
 
@@ -95,7 +95,7 @@ node dist/index.js \
 > And also you can use `--user-name` instead of `--user-id`.
 > For more details, see the parameters descriptions below.
 
-### Example-4: Dump all baords followed by a user
+### Example-4: Dump all boards followed by a user
 
 Run it from command line:
 
