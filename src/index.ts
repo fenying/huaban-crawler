@@ -1,3 +1,5 @@
+#!env node
+
 /**
  * Copyright 2018 Angus.Fenying
  *
@@ -17,13 +19,30 @@
 // tslint:disable:no-console
 import * as Huaban from "./libs/HuabanCrawler";
 import * as Clap from "@litert/clap";
-import { sleep } from "./libs/tools";
+import * as $FS from "@litert/async-fs";
+import { Async } from "@litert/core";
+import * as NodePath from "path";
+
+/**
+ * How many pins per requests.
+ */
+const SLICE_SIZE = 20;
 
 function parseCmdLineArgs(): Clap.IParseResult {
 
-    const clap = Clap.createSimpleParser();
+    const clap = Clap.createSimpleParser({
+        follow: true,
+        shortAttach: true,
+        shortAssign: true,
+        fullAssign: true
+    });
 
     clap.addOption({
+        name: "type",
+        withArgument: true,
+        shortcut: "t",
+        description: "The type of resource to be crawled."
+    }).addOption({
         name: "output",
         withArgument: true,
         shortcut: "o",
@@ -32,7 +51,20 @@ function parseCmdLineArgs(): Clap.IParseResult {
         name: "board-id",
         shortcut: "b",
         withArgument: true,
+        defaultArgument: "0",
         description: "The ID of board to be dumpped."
+    }).addOption({
+        name: "user-id",
+        shortcut: "u",
+        withArgument: true,
+        defaultArgument: "0",
+        description: "The ID of user to be dumpped."
+    }).addOption({
+        name: "user-name",
+        shortcut: "U",
+        withArgument: true,
+        defaultArgument: "",
+        description: "The name of user, in URL, to be dumpped."
     }).addOption({
         name: "gap",
         shortcut: "g",
@@ -115,7 +147,7 @@ async function dumpPins(
 
         if (gap) {
 
-            await sleep(Math.floor(
+            await Async.sleep(Math.floor(
                 gap + gap * (1 - accuracy) * Math.random()
             ));
         }
@@ -141,29 +173,249 @@ function printBoardInfo(board: Huaban.IBoardInfo): void {
     console.log(`    Join At:   ${new Date(board.user.created_at * 1000)}`);
 }
 
-(async () => {
+async function saveBoardInfo(
+    board: Huaban.IBoardInfo,
+    output: string
+): Promise<void> {
 
-    const args = parseCmdLineArgs();
+    let data = JSON.parse(JSON.stringify(board));
+
+    delete data.user.boards;
+    delete data.pins;
+
+    await $FS.writeFile(
+        NodePath.resolve(output, "board.json"),
+        JSON.stringify(
+            data,
+            null,
+            2
+        )
+    );
+}
+
+async function _dumpUser(
+    cli: Huaban.IHuabanCrawler,
+    username: string,
+    output: string,
+    gap: number,
+    accuracy: number,
+    ignoreSaved: boolean,
+    saveMeta: boolean
+): Promise<void> {
+
+    console.log(`[HBC] Loading boards of user ${username}...`);
+
+    let boards = await cli.getBoardsByUsername(
+        username,
+        gap,
+        accuracy
+    );
+
+    console.log(`[HBC] ${boards.length} boards found.`);
+
+    for (let board of boards) {
+
+        const boardDir = NodePath.resolve(output, `${username}-${board.board_id}`);
+
+        await _dumpBoard(
+            cli,
+            board,
+            boardDir,
+            gap,
+            accuracy,
+            ignoreSaved,
+            saveMeta,
+            true
+        );
+    }
+
+    console.log(`[HBC] Completed.`);
+}
+
+async function dumpUser(
+    args: Clap.IParseResult,
+    output: string,
+    gap: number,
+    accuracy: number,
+    ignoreSaved: boolean,
+    saveMeta: boolean
+): Promise<void> {
 
     const cli = Huaban.createCrawler();
 
-    const bid = parseInt(args.getOption("board-id"));
+    await cli.initialize();
 
-    const output = args.getOption("output");
+    let uid!: number;
 
-    const gap = args.getOption("gap") === undefined ?
-        0 :
-        parseInt(args.getOption("gap"));
+    let username: string;
 
-    const accuracy = args.getOption("accuracy") === undefined ?
-        1 :
-        parseFloat(args.getOption("accuracy"));
+    if (args.existOption("user-id")) {
 
-    const ignoreSaved = args.existOption("ignore-saved");
+        uid = parseInt(args.getOption("user-id"));
 
-    const saveMeta = args.existOption("save-meta");
+        const userInfo = await cli.getUserInfoByID(uid);
 
-    const SLICE_SIZE = 20;
+        username = userInfo.urlname;
+    }
+    else if (args.existOption("user-name")) {
+
+        username = args.getOption("user-name");
+    }
+    else {
+
+        throw new Error(
+            "Must specify either --user-id or --user-name."
+        );
+    }
+
+    await _dumpUser(
+        cli,
+        username,
+        output,
+        gap,
+        accuracy,
+        ignoreSaved,
+        saveMeta
+    );
+}
+
+async function dumpFollowedBoards(
+    args: Clap.IParseResult,
+    output: string,
+    gap: number,
+    accuracy: number,
+    ignoreSaved: boolean,
+    saveMeta: boolean
+): Promise<void> {
+
+    const cli = Huaban.createCrawler();
+
+    await cli.initialize();
+
+    let uid!: number;
+
+    let username: string;
+
+    if (args.existOption("user-id")) {
+
+        uid = parseInt(args.getOption("user-id"));
+
+        const userInfo = await cli.getUserInfoByID(uid);
+
+        username = userInfo.urlname;
+    }
+    else if (args.existOption("user-name")) {
+
+        username = args.getOption("user-name");
+    }
+    else {
+
+        throw new Error(
+            "Must specify either --user-id or --user-name."
+        );
+    }
+
+    console.log(`[HBC] Loading user ${username} followed boards...`);
+
+    let boards = await cli.getFollowedBoardsByUsername(
+        username,
+        gap,
+        accuracy
+    );
+
+    console.log(`[HBC] ${boards.length} boards found.`);
+
+    for (let board of boards) {
+
+        const boardDir = NodePath.resolve(output, `${board.user.urlname}-${board.board_id}`);
+
+        await _dumpBoard(
+            cli,
+            board,
+            boardDir,
+            gap,
+            accuracy,
+            ignoreSaved,
+            saveMeta,
+            true
+        );
+    }
+
+    console.log(`[HBC] Completed.`);
+}
+
+async function dumpFollowedUsers(
+    args: Clap.IParseResult,
+    output: string,
+    gap: number,
+    accuracy: number,
+    ignoreSaved: boolean,
+    saveMeta: boolean
+): Promise<void> {
+
+    const cli = Huaban.createCrawler();
+
+    await cli.initialize();
+
+    let uid!: number;
+
+    let username: string;
+
+    if (args.existOption("user-id")) {
+
+        uid = parseInt(args.getOption("user-id"));
+
+        const userInfo = await cli.getUserInfoByID(uid);
+
+        username = userInfo.urlname;
+    }
+    else if (args.existOption("user-name")) {
+
+        username = args.getOption("user-name");
+    }
+    else {
+
+        throw new Error(
+            "Must specify either --user-id or --user-name."
+        );
+    }
+
+    console.log(`[HBC] Loading user ${username} followed boards...`);
+
+    let users = await cli.getFollowedUsersByUsername(
+        username,
+        gap,
+        accuracy
+    );
+
+    console.log(`[HBC] ${users.length} users found.`);
+
+    for (let user of users) {
+
+        await _dumpUser(
+            cli,
+            user.urlname,
+            output,
+            gap,
+            accuracy,
+            ignoreSaved,
+            saveMeta
+        );
+    }
+
+    console.log(`[HBC] Completed.`);
+}
+
+async function _dumpBoard(
+    cli: Huaban.IHuabanCrawler,
+    bid: number | Huaban.IBoardInfo,
+    output: string,
+    gap: number,
+    accuracy: number,
+    ignoreSaved: boolean,
+    saveMeta: boolean,
+    forceReload: boolean = false
+): Promise<void> {
 
     let sum: number = 0;
 
@@ -171,15 +423,51 @@ function printBoardInfo(board: Huaban.IBoardInfo): void {
 
     console.info(`[HBC] Loading pins list in board page.`);
 
-    let board = await cli.getBoardInfo(bid);
+    let board = typeof bid === "number" ? await cli.getBoardInfo(bid) : bid;
+
+    bid = board.board_id;
 
     console.log(`[HBC] Loaded details of board:`);
 
     printBoardInfo(board);
 
+    try {
+
+        await $FS.mkdirP(output);
+    }
+    catch {
+        //
+    }
+
+    await saveBoardInfo(board, output);
+
+    let dumpedFiles = await $FS.readdir(output);
+
+    if (dumpedFiles.length - 1 === board.pin_count * 2) {
+
+        console.log(`[HBC] The board has been dumped, skip.`);
+        return;
+    }
+
     let pins = board.pins;
 
+    if (forceReload) {
+
+        pins = await cli.getPinListOfBoardAjax(
+            bid,
+            0xFFFFFFFF,
+            SLICE_SIZE
+        );
+    }
+
     do {
+
+        if (gap) {
+
+            await Async.sleep(Math.floor(
+                gap + gap * (1 - accuracy) * Math.random()
+            ));
+        }
 
         [i, sum] = await dumpPins(
             cli,
@@ -194,7 +482,7 @@ function printBoardInfo(board: Huaban.IBoardInfo): void {
             ignoreSaved
         );
 
-        if (pins.length < SLICE_SIZE) {
+        if (i === board.pin_count) {
 
             break;
         }
@@ -214,20 +502,107 @@ function printBoardInfo(board: Huaban.IBoardInfo): void {
             break;
         }
 
-        if (gap) {
-
-            await sleep(Math.floor(
-                gap + gap * (1 - accuracy) * Math.random()
-            ));
-        }
-
         console.log(`[HBC] Scanned ${pins.length} pins.`);
     }
     while (1);
 
     console.log(`[HBC] All pins in board ${bid} have been downloaded.`);
+}
 
-})().catch((e) => {
+async function dumpBoard(
+    args: Clap.IParseResult,
+    output: string,
+    gap: number,
+    accuracy: number,
+    ignoreSaved: boolean,
+    saveMeta: boolean
+): Promise<void> {
+
+    const cli = Huaban.createCrawler();
+
+    await cli.initialize();
+
+    const bid = parseInt(args.getOption("board-id"));
+
+    return _dumpBoard(
+        cli,
+        bid,
+        output,
+        gap,
+        accuracy,
+        ignoreSaved,
+        saveMeta
+    );
+}
+
+async function main() {
+
+    const args = parseCmdLineArgs();
+
+    const type = args.getOption("type");
+
+    const output = args.getOption("output");
+
+    const gap = args.getOption("gap") === undefined ?
+        0 :
+        parseInt(args.getOption("gap"));
+
+    const accuracy = args.getOption("accuracy") === undefined ?
+        1 :
+        parseFloat(args.getOption("accuracy"));
+
+    const ignoreSaved = args.existOption("ignore-saved");
+
+    const saveMeta = args.existOption("save-meta");
+
+    switch (type.toLowerCase()) {
+    case "board":
+        return await dumpBoard(
+            args,
+            output,
+            gap,
+            accuracy,
+            ignoreSaved,
+            saveMeta
+        );
+    case "user":
+        return await dumpUser(
+            args,
+            output,
+            gap,
+            accuracy,
+            ignoreSaved,
+            saveMeta
+        );
+    case "followed-users":
+        return await dumpFollowedUsers(
+            args,
+            output,
+            gap,
+            accuracy,
+            ignoreSaved,
+            saveMeta
+        );
+    case "followed-boards":
+        return await dumpFollowedBoards(
+            args,
+            output,
+            gap,
+            accuracy,
+            ignoreSaved,
+            saveMeta
+        );
+    default:
+        console.error(
+            `Unknwon resource type "${type}" to be crawled.`
+        );
+
+        return;
+    }
+
+}
+
+main().catch((e) => {
 
     console.error(e);
 });

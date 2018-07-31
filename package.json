@@ -1,6 +1,6 @@
 {
   "name": "huaban-crawler",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "This is a huaban-crawler base on Node.js.",
   "main": "dist/index.js",
   "scripts": {
@@ -24,6 +24,8 @@
     "node": ">=8.6.0"
   },
   "dependencies": {
-    "@litert/clap": "^0.2.2"
+    "@litert/async-fs": "^0.1.0",
+    "@litert/clap": "^0.2.2",
+    "@litert/http": "^0.5.0"
   }
 }

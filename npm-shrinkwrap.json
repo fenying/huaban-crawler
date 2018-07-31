@@ -1,9 +1,17 @@
 {
   "name": "huaban-crawler",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "lockfileVersion": 1,
   "requires": true,
   "dependencies": {
+    "@litert/async-fs": {
+      "version": "0.1.0",
+      "resolved": "https://registry.npmjs.org/@litert/async-fs/-/async-fs-0.1.0.tgz",
+      "integrity": "sha512-LyIqkK2W4blx3o7njkHtnJ8MbkM/XLgH4pgtbRem/H3xSYlIqU3ikW6Qa6ZNIZmRpsg08PxCxNcNrRjMNDGTfw==",
+      "requires": {
+        "@litert/core": "^0.6.0"
+      }
+    },
     "@litert/clap": {
       "version": "0.2.2",
       "resolved": "https://registry.npmjs.org/@litert/clap/-/clap-0.2.2.tgz",
@@ -16,6 +24,15 @@
       "version": "0.6.0",
       "resolved": "https://registry.npmjs.org/@litert/core/-/core-0.6.0.tgz",
       "integrity": "sha512-cbbfhCYzpCxOpl8JjoJ3pVJOi2pOYbUFPLzz0Fwkd1zlzwh9rUSpcZ3EY7Hsa/fweKkVx2VgxSplzM/kRKyNDQ=="
+    },
+    "@litert/http": {
+      "version": "0.5.0",
+      "resolved": "https://registry.npmjs.org/@litert/http/-/http-0.5.0.tgz",
+      "integrity": "sha512-bW5exnoGzZO+v2AfIsicotw2dqfozi7VrMtyNiS5ZBkL0IMc5DWtGX55jCUcMUJG/3S9a4HgYIWSmfdGaagWuw==",
+      "requires": {
+        "@litert/core": "^0.6.0",
+        "reflect-metadata": "^0.1.12"
+      }
     },
     "@types/node": {
       "version": "9.6.23",

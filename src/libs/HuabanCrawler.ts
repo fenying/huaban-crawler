@@ -13,17 +13,21 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import * as HTTP from "./HTTPClient";
+import * as HTTP from "@litert/http";
 import * as $Path from "path";
-import * as $FS from "fs";
-import { sleep } from "./tools";
+import * as $FS from "@litert/async-fs";
+import { Async } from "@litert/core";
 
-const USER_AGENT = "Mozilla/5.0 (Windows NT 6.3; Win64; x64) " +
+const USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
                     "AppleWebKit/537.36 (KHTML, like Gecko) " +
-                    "Chrome/67.0.3396.99 Safari/537.36";
+                    "Chrome/68.0.3440.75 Safari/537.36";
 
+const USER_URL_PREFIX = "http://huaban.com/users/";
+const ROOT_URL_PREFIX = "http://huaban.com/";
 const BOARD_URL_PREFIX = "http://huaban.com/boards/";
 
+const ACCEPT_FOR_HTML = "text/html,application/xhtml+xml,application/xml;" +
+                        "q=0.9,image/webp,image/apng,*/*;q=0.8";
 export interface ICategory {
 
     col: number;
@@ -33,6 +37,13 @@ export interface ICategory {
     name: string;
 
     nav_link: string;
+}
+
+export interface IUserBoards {
+
+    user: IFullUserInfo;
+
+    query_type: "boards";
 }
 
 export interface ISettings {
@@ -50,7 +61,46 @@ export interface IUserInfo {
 
     user_id: number;
 
-    username: number;
+    username: string;
+
+    urlname: string;
+}
+
+export interface IFullUserInfo {
+
+    boards: IBoardInfo[];
+
+    board_count: number;
+
+    boards_like_count: number;
+
+    commodity_count: number;
+
+    created_at: number;
+
+    email: string;
+
+    explore_following_count: number;
+
+    follower_count: number;
+
+    following_count: number;
+
+    like_count: number;
+
+    muse_board_count: number;
+
+    pin_count: number;
+
+    tag_count: number;
+
+    urlname: string;
+
+    user_id: number;
+
+    username: string;
+
+    seq: number;
 }
 
 export interface IBoardInfo {
@@ -181,14 +231,45 @@ export interface IDumpResult {
     size: number;
 }
 
+export interface IFollowedBoards {
+
+    boards: IBoardInfo[];
+
+    following_count: number;
+}
+
+export interface IFollowedUsers {
+
+    user: IFullUserInfo;
+
+    users: IFullUserInfo[];
+}
+
 export interface IHuabanCrawler {
 
-    getPinListOfBoard(
-        id: number,
-        firstPageOnly?: boolean,
-        sleepPeriod?: number,
-        sleepAccuracy?: number
-    ): Promise<IBoardInfo>;
+    initialize(): Promise<void>;
+
+    getUserInfoByID(
+        id: number
+    ): Promise<IFullUserInfo>;
+
+    getFollowedBoardsByUsername(
+        username: string,
+        gap?: number,
+        accuracy?: number
+    ): Promise<IBoardInfo[]>;
+
+    getFollowedUsersByUsername(
+        username: string,
+        gap?: number,
+        accuracy?: number
+    ): Promise<IFullUserInfo[]>;
+
+    getBoardsByUsername(
+        username: string,
+        gap?: number,
+        accuracy?: number
+    ): Promise<IBoardInfo[]>;
 
     getBoardInfo(
         id: number
@@ -304,7 +385,7 @@ implements IHuabanCrawler {
             break;
         }
 
-        if (ignoreIfDumpped && $FS.existsSync(imgPath)) {
+        if (ignoreIfDumpped && await $FS.exists(imgPath)) {
 
             /**
              * 文件已经存在，忽略。
@@ -333,11 +414,11 @@ implements IHuabanCrawler {
                 result;
         }
 
-        $FS.writeFileSync(imgPath, result.data);
+        await $FS.writeFile(imgPath, result.data);
 
         if (metaPath) {
 
-            $FS.writeFileSync(
+            await $FS.writeFile(
                 metaPath,
                 JSON.stringify(pin, null, 2)
             );
@@ -351,56 +432,295 @@ implements IHuabanCrawler {
         };
     }
 
-    public async getPinListOfBoard(
-        id: number,
-        firstPageOnly: boolean = false,
-        sleepPeriod: number = 0,
-        sleepAccuracy: number = 0.5
-    ): Promise<IBoardInfo> {
+    private async _getFollowedBoardsByUsername(
+        username: string,
+        page: number,
+        perPage: number = 20,
+        wfl: number = 1
+    ): Promise<IFollowedBoards> {
 
-        const board = await this.getBoardInfo(id);
+        let result = await this._cli.get({
+            url: `${ROOT_URL_PREFIX}${username}/following/boards?${
+                this._uniqueId
+            }&page=${
+                page
+            }&per_page=${
+                perPage
+            }&wfl=${
+                wfl
+            }`,
+            headers: this._wrapHeaders({
 
-        if (firstPageOnly) {
+                "Accept": "application/json",
+                "Referer": `${ROOT_URL_PREFIX}${username}/following`
+            }, true)
+        });
 
-            return board;
+        if (result.headers && result.headers["set-cookie"]) {
+
+            this._updateCookies(result.headers["set-cookie"] as string[]);
         }
 
-        let minId = Math.min(...board.pins.map((x) => x.pin_id));
+        if (result.code !== 200) {
 
-        while (1) {
+            throw result.data.length ?
+                result.data.toString() :
+                result;
+        }
 
-            if (sleepPeriod) {
+        return JSON.parse(result.data.toString());
+    }
 
-                await sleep(Math.floor(
-                    sleepPeriod + sleepPeriod * (1 - sleepAccuracy) * Math.random()
-                ));
-            }
+    private async _getFollowedUsersByUsername(
+        username: string,
+        max: number,
+        limit: number = 20,
+        wfl: number = 1
+    ): Promise<IFollowedUsers> {
 
-            let pagePins = await this.getPinListOfBoardAjax(
-                id,
-                minId
+        let result = await this._cli.get({
+            url: `${ROOT_URL_PREFIX}${username}/following?${
+                this._uniqueId
+            }&max=${
+                max
+            }&limit=${
+                limit
+            }&wfl=${
+                wfl
+            }`,
+            headers: this._wrapHeaders({
+
+                "Accept": "application/json",
+                "Referer": `${ROOT_URL_PREFIX}${username}/following`
+            }, true)
+        });
+
+        if (result.headers && result.headers["set-cookie"]) {
+
+            this._updateCookies(result.headers["set-cookie"] as string[]);
+        }
+
+        if (result.code !== 200) {
+
+            throw result.data.length ?
+                result.data.toString() :
+                result;
+        }
+
+        return JSON.parse(result.data.toString());
+    }
+
+    private async _getBoardsByUsername(
+        username: string,
+        max: number = 0,
+        limit: number = 10,
+        wfl: number = 1
+    ): Promise<IUserBoards> {
+
+        let url = `${ROOT_URL_PREFIX}${username}/boards?${ this._uniqueId }`;
+
+        if (max) {
+
+            url += `&max=${ max }&limit=${ limit }&wfl=${ wfl }`;
+        }
+
+        let result = await this._cli.get({
+            url,
+            headers: this._wrapHeaders({
+
+                "Accept": "application/json",
+                "Referer": `${ROOT_URL_PREFIX}${username}`
+            }, true)
+        });
+
+        if (result.headers && result.headers["set-cookie"]) {
+
+            this._updateCookies(result.headers["set-cookie"] as string[]);
+        }
+
+        if (result.code !== 200) {
+
+            throw result.data.length ?
+                result.data.toString() :
+                result;
+        }
+
+        return JSON.parse(result.data.toString());
+    }
+
+    public async getBoardsByUsername(
+        username: string,
+        gap: number = 0,
+        accuracy: number = 1
+    ): Promise<any> {
+
+        let ret: IBoardInfo[] = [];
+
+        do {
+
+            let data = await this._getBoardsByUsername(
+                username,
+                ret.length ? Math.max(...ret.map((x) => x.board_id)) : 0
             );
 
-            for (let pin of pagePins) {
-
-                board.pins.push(pin);
-
-                if (pin.pin_id < minId) {
-
-                    minId = pin.pin_id;
-                }
-            }
-
-            if (pagePins.length < 20) {
+            if (!data.user || !data.user.board_count) {
 
                 break;
             }
-        }
 
-        return board;
+            const user = data.user;
+
+            if (user.board_count && user.boards.length) {
+
+                ret = ret.concat(user.boards);
+            }
+            else {
+
+                break;
+            }
+
+            if (gap) {
+
+                await Async.sleep(Math.floor(
+                    gap + gap * (1 - accuracy) * Math.random()
+                ));
+            }
+
+        } while (1);
+
+        return ret;
     }
 
-    private _updateSettings(html: string): void {
+    public async getFollowedBoardsByUsername(
+        username: string,
+        gap: number = 0,
+        accuracy: number = 1
+    ): Promise<IBoardInfo[]> {
+
+        let page = 1;
+        let ret: IBoardInfo[] = [];
+
+        do {
+
+            let data: IFollowedBoards = await this._getFollowedBoardsByUsername(
+                username,
+                page++
+            );
+
+            if (!data.following_count) {
+
+                break;
+            }
+
+            if (data.boards.length) {
+
+                ret = ret.concat(data.boards);
+            }
+            else {
+
+                break;
+            }
+
+            if (gap) {
+
+                await Async.sleep(Math.floor(
+                    gap + gap * (1 - accuracy) * Math.random()
+                ));
+            }
+
+        } while (1);
+
+        return ret;
+    }
+
+    public async getFollowedUsersByUsername(
+        username: string,
+        gap: number = 0,
+        accuracy: number = 1
+    ): Promise<IFullUserInfo[]> {
+
+        let ret: IFullUserInfo[] = [];
+
+        do {
+
+            let data: IFollowedUsers = await this._getFollowedUsersByUsername(
+                username,
+                ret.length > 0 ?
+                    Math.min(...ret.map((x) => x.seq)) : 0xFFFFFFFF
+            );
+
+            if (data.users.length) {
+
+                ret = ret.concat(data.users);
+            }
+            else {
+
+                break;
+            }
+
+            if (gap) {
+
+                await Async.sleep(Math.floor(
+                    gap + gap * (1 - accuracy) * Math.random()
+                ));
+            }
+
+        } while (1);
+
+        return ret;
+    }
+
+    public async getUserInfoByID(
+        id: number
+    ): Promise<IFullUserInfo> {
+
+        let result = await this._cli.get({
+            url: `${USER_URL_PREFIX}${id}`,
+            headers: this._wrapHeaders({
+
+                "Accept": "application/json",
+                "Referer": `${USER_URL_PREFIX}${id}/`
+            }, true)
+        });
+
+        if (result.headers && result.headers["set-cookie"]) {
+
+            this._updateCookies(result.headers["set-cookie"] as string[]);
+        }
+
+        if (result.code !== 200) {
+
+            throw result.data.length ?
+                result.data.toString() :
+                result;
+        }
+
+        return JSON.parse(result.data.toString());
+    }
+
+    public async initialize(): Promise<void> {
+
+        let result = await this._cli.get({
+            url: ROOT_URL_PREFIX,
+            headers: this._wrapHeaders({
+
+                "Accept": ACCEPT_FOR_HTML
+            })
+        });
+
+        if (result.headers && result.headers["set-cookie"]) {
+
+            this._updateCookies(result.headers["set-cookie"] as string[]);
+        }
+
+        if (result.code !== 200) {
+
+            throw result.data.length ?
+                result.data.toString() :
+                result;
+        }
+
+        const html = result.data.toString();
 
         const START_SIGN = 'app["settings"] = ';
         const END_SIGN = 'app["req"] = ';
@@ -440,9 +760,9 @@ implements IHuabanCrawler {
             url: `${BOARD_URL_PREFIX}${id}/`,
             headers: this._wrapHeaders({
 
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8",
-                "Referer": `${BOARD_URL_PREFIX}${id}/`
-            })
+                "Accept": "application/json",
+                "Referer": ROOT_URL_PREFIX
+            }, true)
         });
 
         if (result.headers && result.headers["set-cookie"]) {
@@ -457,36 +777,7 @@ implements IHuabanCrawler {
                 result;
         }
 
-        const html = result.data.toString();
-
-        this._updateSettings(html);
-
-        const START_SIGN = 'app.page["board"] = ';
-
-        const END_SIGN = "app._csr =";
-
-        const startPos = html.indexOf(START_SIGN);
-
-        if (startPos === -1) {
-
-            throw new Error(`Can not translate the board page.`);
-        }
-
-        const relEndPos = html.indexOf(END_SIGN, startPos);
-
-        if (relEndPos === -1) {
-
-            throw new Error(`Can not translate the board page.`);
-        }
-
-        const endPos = html.lastIndexOf(";", relEndPos);
-
-        if (endPos === -1) {
-
-            throw new Error(`Can not translate the board page.`);
-        }
-
-        return JSON.parse(html.slice(startPos + START_SIGN.length, endPos));
+        return JSON.parse(result.data.toString()).board;
     }
 
     private _decodeCookieInfo(setCookieLine: string): Record<string, any> {
