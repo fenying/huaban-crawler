@@ -10,6 +10,7 @@ const USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
 const USER_URL_PREFIX = "http://huaban.com/users/";
 const ROOT_URL_PREFIX = "http://huaban.com/";
 const BOARD_URL_PREFIX = "http://huaban.com/boards/";
+const PIN_URL_PREFIX = "http://huaban.com/pins/";
 
 const ACCEPT_FOR_HTML = "text/html,application/xhtml+xml,application/xml;" +
                         "q=0.9,image/webp,image/apng,*/*;q=0.8";
@@ -244,6 +245,8 @@ export interface IHuabanCrawler {
         accuracy?: number
     ): Promise<IBoardInfo[]>;
 
+    getBoardPinListByPinId(id: number): Promise<IPinInfo[]>;
+
     getFollowedUsersByUsername(
         username: string,
         gap?: number,
@@ -389,7 +392,8 @@ implements IHuabanCrawler {
 
                 "Accept": pin.file.type,
                 "Referer": `${BOARD_URL_PREFIX}${pin.board_id}/`
-            })
+            }),
+            timeout: 10000
         });
 
         if (result.code !== 200) {
@@ -763,6 +767,39 @@ implements IHuabanCrawler {
         }
 
         return JSON.parse(result.data.toString()).board;
+    }
+
+    public async getBoardPinListByPinId(id: number): Promise<IPinInfo[]> {
+
+        let result = await this._cli.get({
+            url: `${PIN_URL_PREFIX}${id}/?${this._uniqueId}`,
+            headers: this._wrapHeaders({
+
+                "Accept": "application/json",
+                "Referer": `${PIN_URL_PREFIX}${id}/`
+            }, true)
+        });
+
+        if (result.headers && result.headers["set-cookie"]) {
+
+            this._updateCookies(result.headers["set-cookie"] as string[]);
+        }
+
+        if (result.code !== 200) {
+
+            throw result.data.length ?
+                result.data.toString() :
+                result;
+        }
+
+        try {
+
+            return JSON.parse(result.data.toString()).pin.board.pins;
+        }
+        catch {
+
+            return [];
+        }
     }
 
     private _decodeCookieInfo(setCookieLine: string): Record<string, any> {

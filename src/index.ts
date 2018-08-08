@@ -85,7 +85,7 @@ async function dumpPins(
     output: string,
     saveMeta: boolean,
     ignoreExists: boolean
-): Promise<[number, number]> {
+): Promise<[number, number, boolean]> {
 
     for (let pin of pins) {
 
@@ -107,7 +107,8 @@ async function dumpPins(
                 console.log(
                     `[HBC][${i}/${board.pin_count}] Pin ${pin.pin_id} skipped.`
                 );
-                continue;
+
+                return [i, sum, true];
             }
 
             sum += resuLt.size;
@@ -137,7 +138,7 @@ async function dumpPins(
         }
     }
 
-    return [i, sum];
+    return [i, sum, false];
 }
 
 function printBoardInfo(board: Huaban.IBoardInfo): void {
@@ -150,11 +151,15 @@ function printBoardInfo(board: Huaban.IBoardInfo): void {
     console.log(`  Category:    ${board.category_name} [${board.category_id}]`);
     console.log(`  Updated At:  ${new Date(board.updated_at * 1000)}`);
     console.log(`  Created At:  ${new Date(board.created_at * 1000)}`);
-    console.log(`  User:`);
-    console.log(`    ID:        ${board.user.user_id}`);
-    console.log(`    Name:      ${board.user.username}`);
-    console.log(`    Pins:      ${board.user.pin_count}`);
-    console.log(`    Join At:   ${new Date(board.user.created_at * 1000)}`);
+
+    if (board.user) {
+
+        console.log(`  User:`);
+        console.log(`    ID:        ${board.user.user_id}`);
+        console.log(`    Name:      ${board.user.username}`);
+        console.log(`    Pins:      ${board.user.pin_count}`);
+        console.log(`    Join At:   ${new Date(board.user.created_at * 1000)}`);
+    }
 }
 
 async function saveBoardInfo(
@@ -164,7 +169,11 @@ async function saveBoardInfo(
 
     let data = JSON.parse(JSON.stringify(board));
 
-    delete data.user.boards;
+    if (data.user) {
+
+        delete data.user.boards;
+    }
+
     delete data.pins;
 
     await $FS.writeFile(
@@ -208,8 +217,7 @@ async function _dumpUser(
             gap,
             accuracy,
             ignoreSaved,
-            saveMeta,
-            true
+            saveMeta
         );
     }
 
@@ -320,8 +328,7 @@ async function dumpFollowedBoards(
             gap,
             accuracy,
             ignoreSaved,
-            saveMeta,
-            true
+            saveMeta
         );
     }
 
@@ -397,8 +404,7 @@ async function _dumpBoard(
     gap: number,
     accuracy: number,
     ignoreSaved: boolean,
-    saveMeta: boolean,
-    forceReload: boolean = false
+    saveMeta: boolean
 ): Promise<void> {
 
     let sum: number = 0;
@@ -414,6 +420,10 @@ async function _dumpBoard(
     console.log(`[HBC] Loaded details of board:`);
 
     printBoardInfo(board);
+
+    await Async.sleep(Math.floor(
+        gap + gap * (1 - accuracy) * Math.random()
+    ));
 
     try {
 
@@ -435,14 +445,38 @@ async function _dumpBoard(
 
     let pins = board.pins;
 
-    if (forceReload) {
+    let maxId = 0xFFFFFFFF; // Fetch new pins from board if necessary.
 
-        pins = await cli.getPinListOfBoardAjax(
+    /**
+     * Sometimes the pins in board maybe outdated.
+     * Thus here should be a reload action.
+     */
+    if (!board.pins || !board.pins.length) {
+
+        board.pins = pins = await cli.getPinListOfBoardAjax(
             bid,
-            0xFFFFFFFF,
+            maxId,
             SLICE_SIZE
         );
     }
+
+    if (!board.pins.length) {
+
+        console.log(`[HBC] Empty board, skip.`);
+        return;
+    }
+
+    pins = await cli.getBoardPinListByPinId(
+        board.pins[0].pin_id
+    );
+
+    if (pins.length === 0) {
+
+        console.log(`[HBC] The board has been dumped, skip.`);
+        return;
+    }
+
+    let skip: boolean = false;
 
     do {
 
@@ -453,7 +487,7 @@ async function _dumpBoard(
             ));
         }
 
-        [i, sum] = await dumpPins(
+        [i, sum, skip] = await dumpPins(
             cli,
             board,
             pins,
@@ -471,13 +505,41 @@ async function _dumpBoard(
             break;
         }
 
-        const minPinId = Math.min(...pins.map((x) => x.pin_id));
+        /**
+         * If met a pin already downloaded, skip all downloaded pins.
+         *
+         * Doing skipping here is because there maybe some new pins in a board.
+         */
+        if (skip) {
 
-        console.log(`[HBC] Scanning pins whose ID after ${minPinId}.`);
+            if (dumpedFiles.length > 1) {
+
+                maxId = Math.min(...dumpedFiles.filter(
+                    (x) => x.endsWith(".json") && !x.startsWith("board.")
+                ).map((x) => parseInt(x.slice(0, -5))));
+
+                dumpedFiles = [];
+            }
+            else {
+
+                throw new Error("Unexpected error.");
+            }
+
+            /**
+             * Remember to shutdown skip flag.
+             */
+            skip = false;
+        }
+        else {
+
+            maxId = Math.min(...pins.map((x) => x.pin_id));
+        }
+
+        console.log(`[HBC] Scanning pins whose ID after ${maxId}.`);
 
         pins = await cli.getPinListOfBoardAjax(
             bid,
-            minPinId,
+            maxId,
             SLICE_SIZE
         );
 
